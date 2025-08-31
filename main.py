@@ -2,10 +2,10 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 import hashlib
 import struct
-import random
-import threading
-from collections import Counter
 import zlib
+
+import requests
+import json
 
 def pid_to_fc(pid: int) -> int:
     if pid == 0: return 0
@@ -83,6 +83,8 @@ def bump_id(file_path: str, offset: int) -> bytes:
         new_byte_int = original_byte_int + 1
         if new_byte_int > 255:
             raise ValueError(offset)
+        if original_byte_int == 0:
+            result_crc_label.config(text=f"warning!\noriginal byte at {hex(offset)} was 00.\nmake sure the rkp is valid!")
 
         f.seek(offset)
 
@@ -98,7 +100,11 @@ def write_hex_to_rkp() -> None:
     if input_type == 0: decimal_value_int = fc_to_pid(crc_user_input)
     elif input_type == 1: decimal_value_int = int(crc_user_input)
     else:
-        result_crc_label.config(text="failure! invalid input.")
+        result_crc_label.config(text="failure!\ninvalid input.")
+        return
+    pinfo_data = run_pinfo(decimal_value_int)
+    if pinfo_data:
+        result_crc_label.config(text=f"failure!\nfc is taken by {pinfo_data["User"]["LastInGameSn"]}")
         return
     # take rkp as input
     file_path = filedialog.askopenfilename(title="select license file", filetypes=[("RKP files", "*.rkp")])
@@ -120,13 +126,51 @@ def write_hex_to_rkp() -> None:
                 return
             process_file_data(file_path)  # updates crc
 
-            result_crc_label.config(text=f"success!\nset fc to {format_fc(pid_to_fc(decimal_value_int))}"
+            end_text = (f"success!\nset fc to {format_fc(pid_to_fc(decimal_value_int))}"
                                          f"\n0x4C byte: {byte_4c.hex()}"
                                          f"\n0x58 byte: {byte_58.hex()}")
+            if byte_4c.hex() == "01" or byte_58.hex() == "01": end_text += "\nwarning! one of the bytes was 00.\ncheck if the rkp is valid!"
+            result_crc_label.config(text=end_text)
+
     except ValueError as ve:
         messagebox.showerror("Input Error", str(ve))
     except Exception as e:
         messagebox.showerror("Error", str(e))
+
+def run_pinfo(pid: int):
+    url = "http://rwfc.net/api/pinfo"
+    headers = {"Content-Type": "application/json"}
+    payload = {"pid": pid}
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+        return None
+
+def standalone_pinfo():
+    pinfo_input = entry_pinfo.get()
+    input_type = is_fc_or_pid(pinfo_input)
+    if input_type == 0:
+        pid = fc_to_pid(pinfo_input)
+    elif input_type == 1:
+        pid = int(pinfo_input)
+    else:
+        result_crc_label.config(text="failure! invalid input.")
+        return
+
+    data = run_pinfo(pid)
+    if data:
+        discord_id = data["User"]["DiscordID"]
+        print(discord_id)
+        mii_name = data["User"]["LastInGameSn"]
+        banned_bool = "yes" if data["User"]["Restricted"] else "no"
+        label_string = f"fc taken by {mii_name}\nbanned: {banned_bool}"
+        if discord_id: label_string += f"\ndiscord id: {discord_id}"
+        result_pinfo_label.config(text=label_string)
+    else:
+        result_pinfo_label.config(text="fc is free!")
 
 root = tk.Tk()
 root.title("change fc")
@@ -155,8 +199,8 @@ result_label.pack(pady=10)
 crc_frame = tk.LabelFrame(main_frame, text="write new fc", bg='#E6E6FA', font=("Helvetica", 14))
 crc_frame.pack(padx=10, pady=10, fill="both", expand=True)
 
-instruction_label_2 = tk.Label(crc_frame, text="enter FC or PID", bg='#E6E6FA', font=("Helvetica", 12))
-instruction_label_2.pack(pady=5)
+instruction_label_crc = tk.Label(crc_frame, text="enter FC or PID", bg='#E6E6FA', font=("Helvetica", 12))
+instruction_label_crc.pack(pady=5)
 
 entry_crc = tk.Entry(crc_frame, width=20, font=("Helvetica", 12), bg='#FFFFFF', borderwidth=2, relief="groove")
 entry_crc.pack(pady=5)
@@ -167,8 +211,25 @@ write_hex_button.pack(pady=5)
 result_crc_label = tk.Label(crc_frame, text="", bg='#E6E6FA', font=("Helvetica", 12))
 result_crc_label.pack(pady=10)
 
+# pinfo
+pinfo_frame = tk.LabelFrame(main_frame, text="pinfo", bg='#E6E6FA', font=("Helvetica", 14))
+pinfo_frame.pack(padx=10, pady=10, fill="both", expand=True)
+
+instruction_label_pinfo = tk.Label(pinfo_frame, text="enter FC or PID", bg='#E6E6FA', font=("Helvetica", 12))
+instruction_label_pinfo.pack(pady=5)
+
+entry_pinfo = tk.Entry(pinfo_frame, width=20, font=("Helvetica", 12), bg='#FFFFFF', borderwidth=2, relief="groove")
+entry_pinfo.pack(pady=5)
+
+run_pinfo_button = tk.Button(pinfo_frame, text="run /pinfo", command=standalone_pinfo, font=("Helvetica", 12), bg='#7B68EE', fg='white', relief="raised")
+run_pinfo_button.pack(pady=5)
+
+result_pinfo_label = tk.Label(pinfo_frame, text="", bg='#E6E6FA', font=("Helvetica", 12))
+result_pinfo_label.pack(pady=10)
+
+# credits
 show_credits_button = tk.Button(main_frame, text="Credits", command=show_credits, font=("Helvetica", 12), bg='#7B68EE', fg='white', relief="raised")
-show_credits_button.pack(pady=10)
+show_credits_button.pack(pady=20)
 
-
+# compile using this command: pyinstaller -F --icon=C:\Users\HyperLexus\Downloads\nyacheer.ico --noconsole --hidden-import=requests C:\Users\HyperLexus\PycharmProjects\change-license-fc\main.py
 root.mainloop()
