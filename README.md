@@ -1,5 +1,6 @@
 # change-license-fc
 provide it with an rkp and you can change the fc assigned to it
+**!!WARNING!! THE TOOL DOES NOT CHECK IF THE FC EXISTS! THAT IS YOUR RESPONSIBILITY**
 
 top section is a converter between fc and pid\
 bottom section is a tool to check if an fc is taken
