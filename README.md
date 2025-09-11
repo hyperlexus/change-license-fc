@@ -7,7 +7,7 @@ bottom section is a tool to check if an fc is taken
 <br>
 
 middle section:
-1. fetch license rkp (extract via torran)
+1. fetch license rkp (extract via torran, go to Tools > License Manager and export)
 2. type in fc or pid
 3. click the button and select your rkp
 4. import license rkp back into rksys
